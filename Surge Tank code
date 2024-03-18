@@ -1,0 +1,219 @@
+import numpy as np
+from scipy.integrate import odeint
+import matplotlib.pyplot as plt
+
+# Parámetros
+Dh = 0.3
+g = 9.8
+As = 314.16  # sección transversal de la chimenea de equilibrio (surge area) (20m de diámetro)
+At = 78.54  # Sección transversal del túnel de aducción (10m de diámetro)
+Qtur = 0  # Caudal de la chimenea de equilibrio
+L = 700  # Largo del túnel de aducción
+c1 = Dh / (200**2)  # Constante 1
+k = 219.5  # 0.5*(As/Ac)^2+(As/Ac-1)^2 #Coeficiente de pérdida
+c2 = k / (2 * g)  # Constante 2
+Q_initials = [50, 100, 150, 200]  # Caudales de prueba
+tiempo_onda = 600  # Tiempo total
+H_max= 185.3 #ACÁ SE INGRESA LA ALTURA MÁXIMA DEL EMBALSE
+H_min = 178 #ACÁ SE INGRESA LA ALTURA MÍNIMA DEL EMBALSE
+A_max = H_max - Dh  # Altura máxima de la reserva menos la carga (m)
+A_min = H_min - Dh  # Altura mínima del embalse (m)
+
+# Parámetros en forma de diccionario
+parameters = {'As': As, 'At': At, 'Qtur': Qtur, 'L': L, 'c1': c1, 'c2': c2}
+
+# Función de la ecuación diferencial
+def MassOscillation(y, t, As, At, Qtur, L, c1, c2):
+    Q, z = y
+    dQ = g * At / L * (-z - c1 * Q * np.abs(Q) - c2 / As**2 * (Q - Qtur) * np.abs(Q - Qtur))
+    dz = (Q - Qtur) / As
+    return [dQ, dz]
+
+# Tiempos
+times = np.linspace(0, tiempo_onda, 1000)
+
+# Crear dos subgráficos
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+print("Máximos y mínimos para el rechazo de carga")
+for Q_initial in Q_initials:
+    # Calcular los valores de z con la ecuación diferencial
+    yinit = [Q_initial, -c1 * Q_initial**2]
+    out = odeint(MassOscillation, yinit, times, args=(As, At, Qtur, L, c1, c2))
+    z_values = out[:, 1]
+
+    # Sumar A_max y A_min
+    z_values_max = z_values + A_max
+    z_values_min = z_values + A_min
+
+    # Graficar el primer subgráfico (suma de A_max)
+    ax1.plot(times, z_values_max, label=f'Q = ({int(Q_initial)})')
+
+    # Graficar el segundo subgráfico (suma de A_min)
+    ax2.plot(times, z_values_min, label=f'Q = ({int(Q_initial)})')
+    # Imprimir mínimo y máximo para cada caudal
+    min_z_max = np.min(z_values_max)
+    max_z_max = np.max(z_values_max)
+    min_z_min = np.min(z_values_min)
+    max_z_min = np.max(z_values_min)
+
+    print(f'Caudal {Q_initials}:')
+    print(f'Mínimo con el embalse a máxima capacidad: {min_z_max}')
+    print(f'Máximo con el embalse a máxima capacidad: {max_z_max}')
+    print(f'Mínimo con el embalse a mínima capacidad: {min_z_min}')
+    print(f'Máximo con el embalse a mínima capacidad: {max_z_min}')
+    print()
+print("-----------------")
+print()
+# Ajustar el diseño para evitar superposiciones
+ax1.set_title(f'Rechazo de carga con emblase al máximo ({H_max} msnm) - Altura vs tiempo')
+ax1.set_xlabel('Tiempo (s)')
+ax1.set_ylabel('z (m)')
+ax1.legend()
+
+ax2.set_title(f'Rechazo de carga con emblase al mínimo ({H_min} msnm) - Altura vs tiempo')
+ax2.set_xlabel('Tiempo (s)')
+ax2.set_ylabel('z (m)')
+ax2.legend()
+
+plt.tight_layout()
+
+# Mostrar los gráficos
+plt.show()
+
+#-----------------------------------------------------------------------------------------
+#-----------------------------------------------------------------------------------------
+# Función de la ecuación diferencial para el arranque gradual con flujo turbinado
+def GradualStart(y, t, As, At, Qtur, L, c1, c2, Qturb):
+    Q, z = y
+    # Ecuaciones diferenciales
+    dQ = g * At / L * (-z - c1 * Q * np.abs(Q) - c2 / As**2 * (Q - Qturb) * np.abs(Q - Qturb))
+    dz = (Q - Qtur - Qturb) / As
+    return [dQ, dz]
+
+# Condiciones iniciales y tiempos
+y0 = [Dh, 0]  # Altura y caudal inicial igual a 0
+times = np.linspace(0, tiempo_onda, 1000)  
+
+# Crear dos subgráficos
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+
+z_crit_max = []
+z_crit_min = []
+print("Máximos y mínimos para la toma de carga")
+for caudal in Q_initials:
+    sol = odeint(GradualStart, y0, times, args=(As, At, Qtur, L, c1, c2, caudal))
+
+    # Obtener z_values y tiempo crítico para cada caudal
+    z_values = sol[:, 1]
+    min_z_index = np.argmin(z_values)
+    max_z_index = np.argmax(z_values)
+    time_of_min_z = times[min_z_index]
+    time_of_max_z = times[max_z_index]
+    min_z_value = z_values[min_z_index]
+    max_z_value = z_values[max_z_index]
+    z_crit_max.append(max_z_value)  # Sumar A_max
+    z_crit_min.append(min_z_value)  # Sumar A_min
+    tcrit= time_of_min_z
+    
+    # Graficar el primer subgráfico (suma de A_max)
+    ax1.plot(times, z_values + A_max, label=f'Q={caudal}')
+    
+    # Graficar el segundo subgráfico (suma de A_min)
+    ax2.plot(times, z_values + A_min, label=f'Q={caudal}')
+
+    min_z_max = np.min(z_crit_min)+A_max
+    max_z_max = np.max(z_crit_max)+A_max
+    min_z_min = np.min(z_crit_min)+A_min
+    max_z_min = np.max(z_crit_max)+A_min
+
+    print(f'Caudal {caudal}:')
+    print(f'Mínimo con el embalse a máxima capacidad: {min_z_max}')
+    print(f'Máximo con el embalse a máxima capacidad: {max_z_max}')
+    print(f'Mínimo con el embalse a mínima capacidad: {min_z_min}')
+    print(f'Máximo con el embalse a mínima capacidad: {max_z_min}')
+    print()
+print("----------------")
+print()
+# Ajustar el diseño para evitar superposiciones
+ax1.set_title(f'Toma de carga con emblase al máximo ({H_max} msnm) - Altura vs tiempo')
+ax1.set_xlabel('Tiempo (s)')
+ax1.set_ylabel('Altura (m)')
+ax1.legend()
+
+ax2.set_title(f'Toma de carga con emblase al mínimo ({H_min} msnm) - Altura vs tiempo')
+ax2.set_xlabel('Tiempo (s)')
+ax2.set_ylabel('Altura (m)')
+ax2.legend()
+
+plt.tight_layout()
+
+# Mostrar los gráficos
+plt.show()
+
+#-----------------------------------------------------------------------------------------
+#-----------------------------------------------------------------------------------------
+colors = ["blue", "orange", "green","red"]
+# Crear dos gráficos, uno para A_max y otro para A_min
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+
+# Imprimir encabezado
+print("Máximos y mínimos para la toma y el rechazo de carga")
+
+for i, caudal in enumerate(Q_initials):
+    # Solución para el arranque gradual
+    sol_start = odeint(GradualStart, y0, times, args=(As, At, Qtur, L, c1, c2, caudal))
+    
+    # Obtener el índice y la altura del mínimo de la solución gradual
+    min_z_index = np.argmin(sol_start[:, 1])
+    min_z_value = sol_start[min_z_index, 1]
+    
+    # Tomar la última altura del arranque gradual como condición inicial para MassOscillation
+    yinit = [caudal, min_z_value]
+    
+    # Solución para el rechazo de carga (después del tiempo crítico) - A_max
+    sol_rejection_max = odeint(MassOscillation, yinit, times[min_z_index:], args=(As, At, Qtur, L, c1, c2))
+    
+    # Concatenar las soluciones de GradualStart y MassOscillation para A_max
+    combined_solution_max = np.vstack((sol_start[:min_z_index], sol_rejection_max))
+    
+    # Solución para el rechazo de carga (después del tiempo crítico) - A_min
+    sol_rejection_min = odeint(MassOscillation, yinit, times[min_z_index:], args=(As, At, Qtur, L, c1, c2))
+    
+    # Concatenar las soluciones de GradualStart y MassOscillation para A_min
+    combined_solution_min = np.vstack((sol_start[:min_z_index], sol_rejection_min))
+    
+    # Graficar A_max
+    ax1.plot(times, combined_solution_max[:, 1] + A_max, label=f'Q=({caudal})', color=colors[i])
+
+    # Graficar A_min
+    ax2.plot(times, combined_solution_min[:, 1] + A_min, label=f'Q=({caudal})', color=colors[i])
+
+    # Imprimir mínimo y máximo para cada caudal
+    min_z_max = np.min(combined_solution_max[:, 1]+A_max)
+    max_z_max = np.max(combined_solution_max[:, 1]+A_max)
+    min_z_min = np.min(combined_solution_min[:, 1]+A_min)
+    max_z_min = np.max(combined_solution_min[:, 1]+A_min)
+
+    print(f'Caudal {caudal}:')
+    print(f'Mínimo con el embalse a máxima capacidad: {min_z_max}')
+    print(f'Máximo con el embalse a máxima capacidad: {max_z_max}')
+    print(f'Mínimo con el embalse a mínima capacidad: {min_z_min}')
+    print(f'Máximo con el embalse a mínima capacidad: {max_z_min}')
+    print()
+print("----------------")
+print()
+# Ajustar el diseño para evitar superposiciones
+ax1.set_title(f'Toma y rechazo de carga con embalse al máximo ({H_max} msnm) - Altura vs tiempo')
+ax1.set_xlabel('Tiempo (s)')
+ax1.set_ylabel('Altura (m)')
+ax1.legend()
+
+ax2.set_title(f'Toma y rechazo de carga con embalse al mínimo ({H_min} msnm) - Altura vs tiempo')
+ax2.set_xlabel('Tiempo (s)')
+ax2.set_ylabel('Altura (m)')
+ax2.legend()
+
+plt.tight_layout()
+
+# Mostrar los gráficos
+plt.show()
