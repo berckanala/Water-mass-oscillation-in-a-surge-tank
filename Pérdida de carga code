@@ -1,0 +1,29 @@
+import math
+from scipy import optimize
+
+# Datos del problema
+Q = 200  # Caudal en m^3/s
+D = 10  # Diámetro de la tubería en metros
+L = 700  # Longitud de la tubería en metros
+g = 9.8  # Aceleración debida a la gravedad en m/s^2
+epsilon = 0.0015  # Rugosidad absoluta en metros (ejemplo)
+
+# Calcular el área de la sección transversal y la velocidad del flujo
+A = math.pi * (D/2)**2
+V = Q / A
+
+# Calcular el número de Reynolds
+Re = (V * D) / 0.000001  # Viscosidad cinemática del agua asumida como 0.000001 m^2/s
+
+# Estimar el factor de fricción utilizando la ecuación de Colebrook
+def colebrook(f, Re, D, epsilon):
+    return 1 / math.sqrt(f) + 2 * math.log10((epsilon / (3.7 * D)) + (2.51 / (Re * math.sqrt(f))))
+
+# Utilizar el método de la bisección para encontrar el factor de fricción
+f_guess = 0.01  # Supongamos un valor inicial para el factor de fricción
+f = optimize.bisect(colebrook, 0.0001, 1, args=(Re, D, epsilon))
+
+# Calcular el headloss utilizando la ecuación de Darcy-Weisbach
+hf = f * (L / D) * (V**2 / (2 * g))
+
+print(f"La pérdida de carga asociada al caudal de {Q} m^3/s es: {hf} metros")
